@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Portfolio Forecasting Report (Gantt View)</title>
+<style>
+  :root {
+    --bg: #FAFBFC;
+    --panel: #FFFFFF;
+    --border: #E4E8EE;
+    --border-strong: #D3D9E2;
+    --text: #1F2933;
+    --text-muted: #6B7280;
+    --accent: #2F5FA3;
+    --accent-dark: #1B3B6F;
+    --accent-light: #C7D9F0;
+    --orange: #C1560C;
+    --status-inprogress: #2F80ED;
+    --status-completed: #219653;
+    --status-onhold: #DE8A1C;
+    --row-h: 30px;
+    --month-w: 34px;
+    --c-primary: 230px;
+    --c-client: 150px;
+    --c-id: 100px;
+    --c-status: 108px;
+    --c-end: 95px;
+    --c-fab: 100px;
+    --c-ship: 100px;
+    --c-pct: 78px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  .banner {
+    background: linear-gradient(90deg, #E2EFDA 0%, #DCEAD6 100%);
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border-strong);
+    flex-shrink: 0;
+  }
+  .banner h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 24px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .toolbar input[type="text"] {
+    padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 6px;
+    font-size: 13px; width: 240px; outline: none; font-family: inherit;
+  }
+  .toolbar input[type="text"]:focus { border-color: var(--accent); }
+  .toolbar select {
+    padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+    font-size: 13px; font-family: inherit; background: white; outline: none;
+  }
+  .toolbar .count { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+  .legend { display: flex; align-items: center; gap: 14px; font-size: 11.5px; color: var(--text-muted); }
+  .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  .grid-wrap { flex: 1; overflow: auto; position: relative; background: var(--panel); }
+
+  .gantt-grid {
+    display: grid;
+    grid-template-columns:
+      var(--c-primary) var(--c-client) var(--c-id) var(--c-status) var(--c-end) var(--c-fab) var(--c-ship) var(--c-pct)
+      repeat(var(--n-months), var(--month-w));
+    grid-template-rows: 22px 22px;
+    grid-auto-rows: var(--row-h);
+    width: max-content;
+  }
+
+  .cell {
+    display: flex; align-items: center;
+    padding: 0 10px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: var(--panel);
+  }
+  .cell.id { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11.5px; }
+
+  /* Sticky left columns (apply to every row's first 7 cells) */
+  .sticky-col {
+    position: sticky;
+    z-index: 2;
+    background: var(--panel);
+  }
+  .col-0 { left: 0; }
+  .col-1 { left: var(--c-primary); }
+  .col-2 { left: calc(var(--c-primary) + var(--c-client)); }
+  .col-3 { left: calc(var(--c-primary) + var(--c-client) + var(--c-id)); }
+  .col-4 { left: calc(var(--c-primary) + var(--c-client) + var(--c-id) + var(--c-status)); }
+  .col-5 { left: calc(var(--c-primary) + var(--c-client) + var(--c-id) + var(--c-status) + var(--c-end)); }
+  .col-6 { left: calc(var(--c-primary) + var(--c-client) + var(--c-id) + var(--c-status) + var(--c-end) + var(--c-fab)); }
+  .col-7 { left: calc(var(--c-primary) + var(--c-client) + var(--c-id) + var(--c-status) + var(--c-end) + var(--c-fab) + var(--c-ship)); }
+  .col-7 { border-right: 2px solid var(--border-strong); }
+
+  /* Sticky header rows */
+  .head {
+    position: sticky;
+    z-index: 4;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    font-size: 11px;
+    line-height: 1.25;
+    border-bottom: 1px solid var(--accent-dark);
+    align-items: center;
+    white-space: normal;
+  }
+  .head.sticky-col { z-index: 6; top: 0; }
+  .head.year-head {
+    top: 0;
+    background: #F2F2F2;
+    color: #1F2933;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+    border-left: 1px solid var(--border-strong);
+    border-bottom: 1px solid var(--border-strong);
+  }
+  .head.month-head {
+    top: 22px;
+    background: #F8F8F8;
+    color: var(--orange);
+    justify-content: center;
+    font-weight: 700;
+    font-size: 10px;
+    border-left: 1px solid var(--border);
+  }
+
+  .row-alt .cell { background: #FBFCFD; }
+  .row-hover:hover .cell { background: #EEF3FA; }
+  .row-hover:hover .timeline { background: #F5F8FC; }
+
+  .status-pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10.5px; font-weight: 600; }
+  .status-inprogress { background: #E4EEFC; color: var(--status-inprogress); }
+  .status-completed  { background: #E1F3E8; color: var(--status-completed); }
+  .status-onhold     { background: #FCEEDC; color: var(--status-onhold); }
+
+  .timeline {
+    position: relative;
+    border-bottom: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    grid-column: 9 / span var(--n-months);
+    background: repeating-linear-gradient(
+      to right, transparent, transparent calc(var(--month-w) - 1px),
+      var(--border) calc(var(--month-w) - 1px), var(--border) var(--month-w)
+    );
+  }
+  .bar-track {
+    position: absolute; top: 6px; height: 18px; border-radius: 5px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08); background: var(--accent-light);
+  }
+  .bar-fill { position: absolute; top: 0; left: 0; bottom: 0; background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dark) 100%); }
+  .bar-track.overflow::after {
+    content: "\2192"; position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+    color: white; font-size: 11px; font-weight: 700;
+  }
+
+  .tooltip {
+    position: fixed; background: #1F2933; color: white; font-size: 11.5px; padding: 8px 10px;
+    border-radius: 6px; pointer-events: none; z-index: 50; display: none; line-height: 1.5;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25); max-width: 240px;
+  }
+  .tooltip b { color: #A9C6F5; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="banner">
+    <h1>Portfolio Forecasting Report (Gantt View)</h1>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="searchBox" placeholder="Search project name, client, or ID&hellip;">
+    <select id="statusFilter"><option value="">All statuses</option></select>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--accent-dark)"></span>Completed progress</span>
+      <span><span class="swatch" style="background:var(--accent-light)"></span>Remaining work</span>
+    </div>
+    <div class="count" id="rowCount"></div>
+  </div>
+
+  <div class="grid-wrap" id="gridWrap">
+    <div class="gantt-grid" id="ganttGrid"></div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = [{"name": "Deerfield MDP", "id": "M200484-05", "client": "", "status": "In Progress ", "fabStart": "2026-03-10", "shipDate": "2026-06-01", "endDate": "2024-07-01", "pctComplete": 0.975774422254526}, {"name": "15 kV Gen. Breaker Skid (18)", "id": "M200468-01", "client": "VoltaGrid", "status": "In Progress ", "fabStart": "2025-09-17", "shipDate": "2026-03-21", "endDate": "2026-02-20", "pctComplete": 1.0}, {"name": "Qty 2 Transfomer termination Boxes", "id": "M200496-01", "client": "ABB Inc.", "status": "Completed ", "fabStart": "2026-02-13", "shipDate": "2026-03-16", "endDate": "2026-03-30", "pctComplete": 1.0}, {"name": "F101600-01 Transformer Enclosure", "id": "M200497-01", "client": "Enmax Power Corporation", "status": "Completed ", "fabStart": "2026-03-27", "shipDate": "2026-04-20", "endDate": "2026-04-27", "pctComplete": 1.0}, {"name": "2300 KVA Dredge Mounted Substation (2)", "id": "M200471-01", "client": "DSC Dredge", "status": "Completed ", "fabStart": "2025-11-25", "shipDate": "2026-03-20", "endDate": "2026-05-08", "pctComplete": 1.0}, {"name": "Close-Coupled Breaker (1) ", "id": "M200504-01", "client": "Compass Energy Systems", "status": "In Progress ", "fabStart": "2026-04-09", "shipDate": "2026-05-15", "endDate": "2026-05-18", "pctComplete": 1.0}, {"name": "35kV FCB (18)", "id": "M200468-03", "client": "VoltaGrid", "status": "Completed ", "fabStart": "2026-02-23", "shipDate": "2026-06-30", "endDate": "2026-05-20", "pctComplete": 1.0}, {"name": "15kV Generator SWGR and NGR (QTY= 20)", "id": "M200449-03", "client": "Propell", "status": "Completed ", "fabStart": "2025-11-10", "shipDate": "2026-06-10", "endDate": "2026-06-12", "pctComplete": 1.0}, {"name": "ICB 35kV Breakers Cells (82)", "id": "M200468-04", "client": "", "status": "In Progress ", "fabStart": "2025-11-19", "shipDate": "2026-04-06", "endDate": "2026-06-26", "pctComplete": 1.0}, {"name": "2-Year Recommended Spare Parts", "id": "M200495-03", "client": "", "status": "In Progress ", "fabStart": null, "shipDate": "2026-06-19", "endDate": "2026-06-26", "pctComplete": 0.9999995508774959}, {"name": "Growtec MDP", "id": "M200483-03", "client": "", "status": "In Progress ", "fabStart": "2026-03-03", "shipDate": "2026-06-12", "endDate": "2026-07-03", "pctComplete": 1.0}, {"name": "15kV GCB Version C", "id": "M200468-02", "client": "", "status": "In Progress ", "fabStart": "2025-11-21", "shipDate": "2026-06-26", "endDate": "2026-07-10", "pctComplete": 0.98}, {"name": "13.8kV Switchgear", "id": "M200469-01", "client": "EECOL Electric", "status": "In Progress ", "fabStart": "2025-11-03", "shipDate": "2026-09-27", "endDate": "2026-07-10", "pctComplete": 0.8}, {"name": "Home Site CDP", "id": "M200484-02", "client": "", "status": "In Progress ", "fabStart": "2026-02-12", "shipDate": "2026-06-26", "endDate": "2026-07-24", "pctComplete": 0.9390565856249179}, {"name": "Deerfield CDP", "id": "M200484-06", "client": "", "status": "In Progress ", "fabStart": "2026-02-12", "shipDate": "2026-06-26", "endDate": "2026-07-24", "pctComplete": 0.9646299011557861}, {"name": "Hog Barn MDP", "id": "M200484-03", "client": "", "status": "In Progress ", "fabStart": "2026-03-10", "shipDate": "2026-06-26", "endDate": "2026-07-24", "pctComplete": 0.9702734210819319}, {"name": "Home Site MDP", "id": "M200484-01", "client": "", "status": "In Progress ", "fabStart": "2026-03-10", "shipDate": "2026-06-26", "endDate": "2026-07-24", "pctComplete": 1.0}, {"name": "Skid Mounted 15kV Switchgear", "id": "M200473-01", "client": "Graham Industrial Services", "status": "Completed ", "fabStart": "2026-01-30", "shipDate": "2026-05-29", "endDate": "2026-07-29", "pctComplete": 0.99}, {"name": "72kV \u2013 13.8kV Shovel Substation", "id": "M200426-01", "client": "Suncor Energy", "status": "Completed ", "fabStart": "2025-04-04", "shipDate": "2026-03-03", "endDate": "2026-07-31", "pctComplete": 1.0}, {"name": "MineTek/IM14 Stepdown Transformer Feeder Skid (1)", "id": "M200479-01", "client": "CNRL - Horizon", "status": "In Progress ", "fabStart": "2026-01-21", "shipDate": "2026-07-17", "endDate": "2026-07-31", "pctComplete": 1.0}, {"name": "Suncor Energy - Shovel Voltage Regulators", "id": "M200452-01", "client": "Suncor", "status": "In Progress ", "fabStart": "2025-08-04", "shipDate": "2026-07-24", "endDate": "2026-08-03", "pctComplete": 0.96}, {"name": "600V Switchgear (1)", "id": "M200505-01", "client": "Westburne Electric", "status": "In Progress ", "fabStart": "2026-04-27", "shipDate": "2026-06-20", "endDate": "2026-08-09", "pctComplete": 0.8}, {"name": "LV Switchgear Enclosures (4)", "id": "M200498-03", "client": "", "status": "In Progress ", "fabStart": "2026-03-16", "shipDate": "2026-07-29", "endDate": "2026-08-12", "pctComplete": 0.0}, {"name": "MV Switchgear Unit (2 No PT)", "id": "M200498-02", "client": "", "status": "In Progress ", "fabStart": "2026-03-16", "shipDate": "2026-07-29", "endDate": "2026-08-12", "pctComplete": 0.2}, {"name": "MV Switchgear with pt", "id": "M200498-01", "client": "Platinum Engineering", "status": "In Progress ", "fabStart": "2026-03-16", "shipDate": "2026-07-29", "endDate": "2026-08-12", "pctComplete": 0.0}, {"name": "M200502-03 - Syncrude - 57-2PSWB06-4 600V Switch Rack", "id": "M200502-03", "client": "", "status": "In Progress ", "fabStart": "2026-03-18", "shipDate": "2027-04-30", "endDate": "2026-08-13", "pctComplete": 0.25}, {"name": "57-2PSWB06-1 600V Switch Rack (1)", "id": "M200502-01", "client": "", "status": "In Progress ", "fabStart": "2026-03-18", "shipDate": "2027-04-30", "endDate": "2026-08-13", "pctComplete": 0.25}, {"name": "1200A Wall mounted junction Boxes", "id": "M200478-01", "client": "ABB", "status": "Completed ", "fabStart": "2026-01-29", "shipDate": "2026-07-31", "endDate": "2026-08-14", "pctComplete": 1.0}, {"name": "5kV Switchgear Assembly (1)", "id": "M200493-01", "client": "Associated Engineering", "status": "In Progress ", "fabStart": "2026-05-19", "shipDate": "2026-08-24", "endDate": "2026-08-20", "pctComplete": 0.3}, {"name": "Breaker Lift Truck & Ground Truck", "id": "M200462-06", "client": "", "status": "In Progress ", "fabStart": null, "shipDate": "2026-08-24", "endDate": "2026-09-07", "pctComplete": 0.5}, {"name": "MLX-E Qty 2 25kV Breaker Skid ", "id": "M200482-01", "client": "Worley Parsons", "status": "In Progress ", "fabStart": "2026-02-25", "shipDate": "2026-08-24", "endDate": "2026-09-07", "pctComplete": 0.85}, {"name": "72kV Tie Breaker Skid", "id": "M200450-01", "client": "Suncor", "status": "In Progress ", "fabStart": "2026-03-13", "shipDate": "2026-08-28", "endDate": "2026-09-11", "pctComplete": 0.3}, {"name": "Breaker Remote Control Panel", "id": "M200462-07", "client": "", "status": "In Progress ", "fabStart": "2026-01-26", "shipDate": "2026-08-24", "endDate": "2026-09-14", "pctComplete": 0.5}, {"name": "480V & 208V Switchboards (1 each)", "id": "M200509-01", "client": "Voltagrid", "status": "In Progress ", "fabStart": "2026-03-17", "shipDate": "2026-08-17", "endDate": "2026-09-14", "pctComplete": 0.965084537182892}, {"name": "Field Services of Supplied Equipment + Training", "id": "M200462-05", "client": "", "status": "In Progress ", "fabStart": null, "shipDate": "2026-09-01", "endDate": "2026-09-15", "pctComplete": 0.0}, {"name": "Spare Parts", "id": "M200462-08", "client": "", "status": "In Progress ", "fabStart": null, "shipDate": "2026-09-01", "endDate": "2026-09-15", "pctComplete": 0.33}, {"name": "Albesol Energy - Ottawa Univeristy Metering Cells (2)", "id": "M200524-01", "client": "Albesol Energy", "status": "In Progress ", "fabStart": "2026-07-29", "shipDate": "2026-09-08", "endDate": "2026-09-15", "pctComplete": null}, {"name": "GFS Edmotnon", "id": "M200531-01", "client": "McKinley Electric", "status": "In Progress ", "fabStart": "2026-11-27", "shipDate": "2027-09-07", "endDate": "2026-09-21", "pctComplete": null}, {"name": "4000A Switchboard (Qty. 5)", "id": "M200515-01", "client": "Mission Critical Group", "status": "In Progress ", "fabStart": "2026-08-04", "shipDate": "2026-10-05", "endDate": "2026-09-25", "pctComplete": 0.17}, {"name": "REV FS Remote Control Boxes (Qty. 02)", "id": "M200521-01", "client": "REV Field Services", "status": "On Hold ", "fabStart": null, "shipDate": null, "endDate": "2026-09-30", "pctComplete": 0.02}, {"name": "PLB-MV2 25kV 5-Cell Disconnect Switchgear", "id": "M200462-02 ", "client": "", "status": "In Progress ", "fabStart": "2026-01-26", "shipDate": "2026-06-26", "endDate": "2026-09-30", "pctComplete": 0.95}, {"name": "MV Outdoor (1) & LV Indoor (1) Switchgears", "id": "M200500-01", "client": "Merritz Corporation", "status": "In Progress ", "fabStart": "2026-06-23", "shipDate": "2026-09-11", "endDate": "2026-09-30", "pctComplete": 0.38}, {"name": "PLB-MV3 25kV 4-Cell Disconnect Switchgear", "id": "M200462-03", "client": "", "status": "In Progress ", "fabStart": "2026-01-26", "shipDate": "2026-07-31", "endDate": "2026-09-30", "pctComplete": 0.8}, {"name": "125VDC UPS", "id": "M200462-04", "client": "", "status": "In Progress ", "fabStart": null, "shipDate": "2026-07-31", "endDate": "2026-09-30", "pctComplete": 0.0}, {"name": "PLB MV1 25kV Switchgear Line-Up", "id": "M200462-01", "client": "", "status": "In Progress ", "fabStart": "2026-01-26", "shipDate": "2026-06-26", "endDate": "2026-09-30", "pctComplete": 0.7}, {"name": "Close-Coupled Breaker Assembly (Qty. 16)", "id": "M200513-01", "client": "Compass Energy Systems", "status": "In Progress ", "fabStart": "2026-07-14", "shipDate": "2026-09-14", "endDate": "2026-10-04", "pctComplete": 0.6}, {"name": "15 kV Indoor Switchgear", "id": "M200495-01", "client": "", "status": "On Hold ", "fabStart": "2026-08-24", "shipDate": "2026-10-05", "endDate": "2026-10-05", "pctComplete": 0.5435546672438231}, {"name": "15kV Outdoor Switchgear", "id": "M200495-02", "client": "", "status": "In Progress ", "fabStart": "2026-08-03", "shipDate": "2026-10-08", "endDate": "2026-10-08", "pctComplete": 0.554147126690347}, {"name": "V4 Switchboard C1-QC-8 - Saint-Sim\u00e9on, QC (1)", "id": "M200489-05", "client": "", "status": "", "fabStart": null, "shipDate": "2026-09-09", "endDate": "2026-10-09", "pctComplete": null}, {"name": "M200529-01 Syncrude Bus Duct", "id": "M200529-01", "client": "REV Engineering Ltd.", "status": "In Progress ", "fabStart": "2026-07-27", "shipDate": "2026-09-30", "endDate": "2026-10-14", "pctComplete": 0.23}, {"name": "72kV Circuit Breaker supply", "id": "M200474-01", "client": "Suncor", "status": "In Progress ", "fabStart": null, "shipDate": "2026-11-27", "endDate": "2026-10-15", "pctComplete": 0.05}, {"name": "15kV Switchgear (x2)", "id": "M200490-01", "client": "Schneider Electric", "status": "On Hold ", "fabStart": "2026-08-07", "shipDate": "2026-10-06", "endDate": "2026-10-20", "pctComplete": 0.44317541295012197}, {"name": "600V LV Switchgear", "id": "M200506-02", "client": "", "status": "In Progress ", "fabStart": "2026-07-21", "shipDate": "2026-10-21", "endDate": "2026-10-21", "pctComplete": 0.58038405165649}, {"name": "Custom LV Bus Duct (1) & LV Bus Tap Boxes (2)", "id": "M200491-01", "client": "Custom Electric LTD", "status": "In Progress ", "fabStart": "2026-09-11", "shipDate": "2026-10-14", "endDate": "2026-10-28", "pctComplete": 0.0}, {"name": "80A EV-Enabled Digital Signage Assembly (3)", "id": "M200512-01 ", "client": "CEIP Global", "status": "On Hold ", "fabStart": "2026-09-01", "shipDate": "2026-10-19", "endDate": "2026-11-06", "pctComplete": 0.2}, {"name": "Syncrude - 57-2PSWB06-8 (MLRD Sump) 600V Switch Rack (1)", "id": "M200502-07", "client": "", "status": "In Progress ", "fabStart": "2026-03-18", "shipDate": "2026-10-30", "endDate": "2026-11-13", "pctComplete": 0.0}, {"name": "57-2PSWB06-7 (Shovel Shutdow) 600V Switch Rack (1)", "id": "M200502-06", "client": "", "status": "In Progress ", "fabStart": "2026-03-18", "shipDate": "2026-10-30", "endDate": "2026-11-13", "pctComplete": 0.3}, {"name": "m200502-05 - Syncrude -57-2PSWB06-6 (Facilities) 600V Switch Rack (1)", "id": "M200502-05", "client": "", "status": "In Progress ", "fabStart": "2026-03-18", "shipDate": "2026-10-30", "endDate": "2026-11-13", "pctComplete": 0.0}, {"name": "V4 Cabinet Switchboard - C1 Variant", "id": "M200489-03 ", "client": "", "status": "In Progress ", "fabStart": "2026-02-19", "shipDate": "2026-10-14", "endDate": "2026-11-14", "pctComplete": 0.8}, {"name": "MV Switchgear (Qty. 3)", "id": "M200508-03", "client": "Enerflex - Houston", "status": "In Progress ", "fabStart": "2026-07-02", "shipDate": "2026-10-28", "endDate": "2026-11-16", "pctComplete": 0.08}, {"name": "15kV Generator Switchgear and NGR (QTY= 20)", "id": "M200449-04", "client": "", "status": "In Progress ", "fabStart": "2026-05-05", "shipDate": "2026-10-19", "endDate": "2026-11-19", "pctComplete": 1.0}, {"name": "M400017-02 - 2000A, 40kA FCB (35)", "id": "M200480-02", "client": "Voltagrid", "status": "In Progress ", "fabStart": "2026-03-26", "shipDate": "2026-11-13", "endDate": "2026-11-27", "pctComplete": 0.45}, {"name": "M400017-03 - 1200A, 40kA GCB (230)", "id": "M200480-03", "client": "Voltagrid", "status": "In Progress ", "fabStart": "2026-03-26", "shipDate": "2026-11-13", "endDate": "2026-11-27", "pctComplete": 0.05}, {"name": "M400017-01 - 1200A, 40kA ICB (280)", "id": "M200480-01", "client": "Voltagrid", "status": "In Progress ", "fabStart": "2026-05-25", "shipDate": "2026-11-24", "endDate": "2026-11-27", "pctComplete": null}, {"name": "112 4th Ave SW CDP Retrofit - CPD1 PF Controller", "id": "M200527-02", "client": "", "status": "In Progress ", "fabStart": "2026-09-30", "shipDate": "2026-11-30", "endDate": "2026-12-04", "pctComplete": null}, {"name": "112 4th Ave SW - CDP Retrofit - Chiller CDP", "id": "M200527-03", "client": "", "status": "In Progress ", "fabStart": "2026-09-30", "shipDate": "2026-11-30", "endDate": "2026-12-04", "pctComplete": null}, {"name": "Syncrude 72kV Breaker TL-1 Supply", "id": "M200450-02", "client": "", "status": "In Progress ", "fabStart": null, "shipDate": "2026-11-27", "endDate": "2026-12-04", "pctComplete": 0.1}, {"name": "72kV Breaker supply", "id": "M200485-02", "client": "Suncor", "status": "In Progress ", "fabStart": null, "shipDate": "2026-11-26", "endDate": "2026-12-10", "pctComplete": 0.0}, {"name": "112 4th Ave SW CDP Retro Fit (PF Control Bus)", "id": "M200527-01", "client": "", "status": "In Progress ", "fabStart": "2026-09-30", "shipDate": "2026-11-27", "endDate": "2026-12-11", "pctComplete": null}, {"name": "5kV MV Switchgear", "id": "M200506-01", "client": "", "status": "In Progress ", "fabStart": "2026-07-14", "shipDate": "2026-10-29", "endDate": "2026-12-18", "pctComplete": 0.46657475421722}, {"name": "15 kV Gen. Breaker Skid (18)", "id": "M400015-01", "client": "", "status": "Completed ", "fabStart": null, "shipDate": "2026-12-31", "endDate": "2026-12-31", "pctComplete": 1.0}, {"name": "V4 Cabinet Switchboard - A1 Variant", "id": "M200489-01", "client": "", "status": "In Progress ", "fabStart": "2026-02-19", "shipDate": "2026-12-26", "endDate": "2027-01-01", "pctComplete": 0.8}, {"name": "72kV Breaker Supply", "id": "M200485-01", "client": "Suncor", "status": "In Progress ", "fabStart": null, "shipDate": "2026-12-21", "endDate": "2027-01-04", "pctComplete": 0.1}, {"name": "Close-Coupled Breaker Assembly (Qty. 16)", "id": "M200516-01", "client": "Compass Energy Systems", "status": "In Progress ", "fabStart": "2026-07-24", "shipDate": "2026-12-14", "endDate": "2027-01-04", "pctComplete": 0.4}, {"name": "Advanced Electrical & Motors", "id": "M200530-01", "client": "Advanced Electrical and Motor Control", "status": "In Progress ", "fabStart": "2026-09-29", "shipDate": "2026-12-31", "endDate": "2027-01-14", "pctComplete": null}, {"name": "MCG MV Switchgear (Qty. 02)", "id": "M200525-01", "client": "Mission Critical Group", "status": "In Progress ", "fabStart": "2026-10-02", "shipDate": "2027-01-05", "endDate": "2027-01-19", "pctComplete": 0.07}, {"name": "Schneider Swgr Modification", "id": "M200494-01", "client": "Schneider Electric", "status": "In Progress ", "fabStart": "2026-12-10", "shipDate": "2027-01-06", "endDate": "2027-01-20", "pctComplete": 0.0033821516047718198}, {"name": "M200502-08 - Syncrude - 57-2PNGR06-3, 4, 6 NGR supply", "id": "M200502-08 ", "client": "", "status": "In Progress ", "fabStart": "2026-03-18", "shipDate": "2027-01-08", "endDate": "2027-01-22", "pctComplete": 0.0}, {"name": "Enerflex (7) MV SWGR", "id": "M200533-01", "client": "Enerflex - Houston", "status": "In Progress ", "fabStart": "2026-09-25", "shipDate": "2027-01-15", "endDate": "2027-01-29", "pctComplete": null}, {"name": "MV SWitchgear (2)", "id": "M200508-01", "client": "Enerflex - Houston", "status": "On Hold ", "fabStart": "2026-10-13", "shipDate": "2027-01-22", "endDate": "2027-02-05", "pctComplete": 0.28}, {"name": "25kV Bus Duct Stations", "id": "M200476-01", "client": "Nedco", "status": "In Progress ", "fabStart": "2026-12-14", "shipDate": "2027-01-28", "endDate": "2027-02-11", "pctComplete": 0.028060577781533497}, {"name": "Propell Spare Parts", "id": "M400024-01", "client": "", "status": "In Progress ", "fabStart": null, "shipDate": null, "endDate": "2027-02-12", "pctComplete": null}, {"name": "V4 Cabinet Switchboard - C2 Variant", "id": "M200489-04", "client": "", "status": "In Progress ", "fabStart": "2026-02-19", "shipDate": "2027-03-01", "endDate": "2027-04-01", "pctComplete": 0.8}, {"name": "CAP - Watson Lake Solar IPP 3,000A 3R SWGR", "id": "M200528-01", "client": "PTW Energy", "status": "In Progress ", "fabStart": "2026-10-14", "shipDate": "2027-03-31", "endDate": "2027-04-14", "pctComplete": null}, {"name": "M200502-04 - Syncrude - 57-2PSWB06-5 600V Switch Rack", "id": "M200502-04 ", "client": "", "status": "In Progress ", "fabStart": "2026-03-18", "shipDate": "2027-04-23", "endDate": "2027-05-07", "pctComplete": 0.4}, {"name": "V4 Cabinet Switchboard - B1 Variant", "id": "M200489-02", "client": "", "status": "In Progress ", "fabStart": "2026-02-19", "shipDate": "2027-07-01", "endDate": "2027-08-01", "pctComplete": 0.24}, {"name": "AMSC/SaskPower 25 kV Switchgear (01)", "id": "M200537-01", "client": "AMSC", "status": "In Progress ", "fabStart": null, "shipDate": "2027-08-30", "endDate": "2027-08-15", "pctComplete": 0.02}, {"name": "Hog Barn CDP", "id": "M200484-04", "client": "", "status": "In Progress ", "fabStart": "2026-02-12", "shipDate": "2026-06-26", "endDate": "2028-07-24", "pctComplete": 0.899516534089906}];
+const MONTH_W = 34;
+
+function parseDate(s){ if(!s) return null; const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
+function fmtDate(s){ if(!s) return 'N/A'; const dt=parseDate(s); return (dt.getMonth()+1)+'/'+dt.getDate()+'/'+String(dt.getFullYear()).slice(2); }
+function daysBetween(a,b){ return (b-a)/86400000; }
+function monthShort(m){ return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]; }
+
+const rows = DATA.filter(r => r.endDate);
+const fabStarts = rows.map(r=>r.fabStart).filter(Boolean).map(parseDate);
+const endDates = rows.map(r=>r.endDate).filter(Boolean).map(parseDate);
+const minStartYear = fabStarts.length ? Math.min(...fabStarts.map(d=>d.getFullYear())) : new Date().getFullYear();
+const maxEndDate = new Date(Math.max(...endDates));
+const windowStart = new Date(minStartYear, 0, 1);
+let monthsNeeded = (maxEndDate.getFullYear()-windowStart.getFullYear())*12 + (maxEndDate.getMonth()-windowStart.getMonth()) + 2;
+monthsNeeded = (Math.floor(monthsNeeded/12)+1)*12;
+const WINDOW_MONTHS = Math.min(monthsNeeded, 48);
+const windowEnd = new Date(windowStart.getFullYear(), windowStart.getMonth()+WINDOW_MONTHS, 0);
+const totalDays = daysBetween(windowStart, windowEnd);
+const totalWidth = WINDOW_MONTHS * MONTH_W;
+
+document.documentElement.style.setProperty('--n-months', WINDOW_MONTHS);
+
+const grid = document.getElementById('ganttGrid');
+
+const FIXED_COLS = [
+  {key:'name', label:'Primary'},
+  {key:'client', label:'Client'},
+  {key:'id', label:'Project ID'},
+  {key:'status', label:'Project Status'},
+  {key:'endDate', label:'Target End Date'},
+  {key:'fabStart', label:'Target Fabrication Start Date'},
+  {key:'shipDate', label:'Target Shipping Date'},
+  {key:'pctComplete', label:'% Complete'},
+];
+
+function addCell(text, classes, parent){
+  const d = document.createElement('div');
+  d.className = classes;
+  if (text !== undefined && text !== null) d.textContent = text;
+  parent.appendChild(d);
+  return d;
+}
+
+// Header rows
+FIXED_COLS.forEach((c,i)=>{
+  const el = addCell(c.label, 'cell head sticky-col col-'+i, grid);
+  el.style.gridRow = '1 / span 2';
+});
+
+// Year row (row 1): merged per calendar-year block
+let mm = 0;
+while (mm < WINDOW_MONTHS) {
+  const year = windowStart.getFullYear() + Math.floor((windowStart.getMonth()+mm)/12);
+  let span = 0;
+  while (mm+span < WINDOW_MONTHS && (windowStart.getFullYear() + Math.floor((windowStart.getMonth()+mm+span)/12)) === year) span++;
+  const startCol = 9 + mm; // 1-indexed grid column; 8 fixed cols before timeline starts at col 9
+  const yEl = addCell(year, 'cell head year-head', grid);
+  yEl.style.gridRow = '1';
+  yEl.style.gridColumn = startCol + ' / span ' + span;
+  mm += span;
+}
+
+// Month row (row 2): individual months
+for (let i=0;i<WINDOW_MONTHS;i++){
+  const monDate = new Date(windowStart.getFullYear(), windowStart.getMonth()+i, 1);
+  const mEl = addCell(monthShort(monDate.getMonth()), 'cell head month-head', grid);
+  mEl.style.gridRow = '2';
+  mEl.style.gridColumn = (9+i);
+}
+const HEADER_CELL_COUNT = grid.children.length;
+
+// Status filter options
+const statuses = Array.from(new Set(rows.map(r=>(r.status||'').trim()).filter(Boolean)));
+const statusSel = document.getElementById('statusFilter');
+statuses.forEach(s=>{
+  const opt = document.createElement('option');
+  opt.value = s; opt.textContent = s;
+  statusSel.appendChild(opt);
+});
+
+function statusClass(status){
+  const s = (status||'').trim().toLowerCase();
+  if (s === 'completed') return 'status-completed';
+  if (s === 'on hold') return 'status-onhold';
+  return 'status-inprogress';
+}
+
+const tooltip = document.getElementById('tooltip');
+
+function render(){
+  const q = document.getElementById('searchBox').value.trim().toLowerCase();
+  const statusVal = statusSel.value;
+
+  // remove all rows after the header
+  while (grid.children.length > HEADER_CELL_COUNT) grid.removeChild(grid.lastChild);
+
+  let shown = 0;
+  rows.forEach((r, idx)=>{
+    if (q && !(r.name.toLowerCase().includes(q) || r.id.toLowerCase().includes(q) || (r.client||'').toLowerCase().includes(q))) return;
+    if (statusVal && (r.status||'').trim() !== statusVal) return;
+    shown++;
+    const altClass = shown % 2 === 0 ? ' row-alt' : '';
+
+    const nameCell = addCell(r.name, 'cell sticky-col col-0 row-hover'+altClass, grid);
+    nameCell.title = r.name;
+    addCell(r.client || '\u2014', 'cell sticky-col col-1 row-hover'+altClass, grid);
+    addCell(r.id, 'cell id sticky-col col-2 row-hover'+altClass, grid);
+
+    const statusCell = addCell(null, 'cell sticky-col col-3 row-hover'+altClass, grid);
+    const pill = document.createElement('span');
+    pill.className = 'status-pill ' + statusClass(r.status);
+    pill.textContent = (r.status||'').trim() || '\u2014';
+    statusCell.appendChild(pill);
+
+    addCell(fmtDate(r.endDate), 'cell sticky-col col-4 row-hover'+altClass, grid);
+    addCell(r.fabStart ? fmtDate(r.fabStart) : 'N/A', 'cell sticky-col col-5 row-hover'+altClass, grid);
+    addCell(r.shipDate ? fmtDate(r.shipDate) : 'N/A', 'cell sticky-col col-6 row-hover'+altClass, grid);
+    addCell(r.pctComplete!=null ? Math.round(r.pctComplete*100)+'%' : '\u2014', 'cell sticky-col col-7 row-hover'+altClass, grid);
+
+    const timeline = document.createElement('div');
+    timeline.className = 'timeline row-hover'+altClass;
+    timeline.style.gridRow = 'span 1';
+
+    if (r.fabStart && r.endDate){
+      const start = parseDate(r.fabStart);
+      const end = parseDate(r.endDate);
+      const left = Math.max(0, daysBetween(windowStart, start) / totalDays * totalWidth);
+      let width = daysBetween(start, end) / totalDays * totalWidth;
+      width = Math.max(width, 3);
+      const isOverflow = end > windowEnd;
+
+      const track = document.createElement('div');
+      track.className = 'bar-track' + (isOverflow ? ' overflow' : '');
+      track.style.left = left + 'px';
+      track.style.width = Math.min(width, totalWidth - left) + 'px';
+
+      const pct = r.pctComplete != null ? r.pctComplete : 0;
+      const fill = document.createElement('div');
+      fill.className = 'bar-fill';
+      fill.style.width = (pct*100) + '%';
+      track.appendChild(fill);
+
+      track.addEventListener('mousemove', (e)=>{
+        tooltip.style.display = 'block';
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top = (e.clientY + 14) + 'px';
+        tooltip.innerHTML = '<b>'+r.name+'</b><br>'+r.id+'<br>'
+          + (r.client ? 'Client: '+r.client+'<br>' : '')
+          + 'Fab Start: '+fmtDate(r.fabStart)+'<br>'
+          + 'Ship: '+(r.shipDate?fmtDate(r.shipDate):'N/A')+'<br>'
+          + 'End: '+fmtDate(r.endDate)+'<br>'
+          + '% Complete: '+(r.pctComplete!=null?Math.round(r.pctComplete*100)+'%':'\u2014');
+      });
+      track.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
+
+      timeline.appendChild(track);
+    }
+    grid.appendChild(timeline);
+  });
+
+  document.getElementById('rowCount').textContent = shown + ' of ' + rows.length + ' projects';
+}
+
+document.getElementById('searchBox').addEventListener('input', render);
+statusSel.addEventListener('change', render);
+render();
+</script>
+</body>
+</html>
