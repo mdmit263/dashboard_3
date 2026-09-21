@@ -101,6 +101,8 @@
     border-bottom: 1px solid var(--accent-dark);
     align-items: center;
     white-space: normal;
+    overflow: hidden;
+    min-width: 0;
   }
   .head.frozen-head { top: 0; grid-row: 1 / span 2; z-index: 7; border-right: 1px solid rgba(255,255,255,0.2); }
   .head.frozen-head.fc7 { border-right: 2px solid var(--accent-dark); }
@@ -128,6 +130,14 @@
   }
   .col-resizer:hover::after, .col-resizer.resizing::after { background: #FFD97D; width: 3px; }
   .col-resizer:hover, .col-resizer.resizing { background: rgba(255,255,255,0.12); }
+
+  /* Master divider: drags the WHOLE frozen table block, scaling all 8 columns together,
+     so it can be pulled fully left (collapse the table, reveal the full chart) or
+     fully right (collapse/cover the chart, let the table fill the view). */
+  .master-resizer { width: 14px; right: -7px; z-index: 9; }
+  .master-resizer::after { width: 3px; background: rgba(255,255,255,0.75); }
+  .master-resizer:hover::after, .master-resizer.resizing::after { background: #FFD97D; width: 4px; }
+  .master-resizer:hover, .master-resizer.resizing { background: rgba(255,255,255,0.22); }
 
   .row-alt .cell { background: #FBFCFD; }
   .row-alt.timeline { background: #FBFCFD; }
@@ -254,8 +264,9 @@ function addCell(text, classes, gridRow, gridCol){
 COLS.forEach((c, i)=>{
   const el = addCell(c.label, 'cell head frozen-head frozen fc'+i, null, i+1);
   const handle = document.createElement('span');
-  handle.className = 'col-resizer';
+  handle.className = 'col-resizer' + (i === COLS.length-1 ? ' master-resizer' : '');
   handle.dataset.colIndex = i;
+  if (i === COLS.length-1) handle.title = 'Drag to collapse the table or the chart';
   el.appendChild(handle);
 });
 
@@ -411,30 +422,58 @@ megaGrid.addEventListener('mouseout', (e)=>{
   megaGrid.querySelectorAll('[data-row="'+cell.dataset.row+'"]').forEach(el => el.classList.remove('row-hit'));
 });
 
-// ===== Excel-style drag-to-resize for the 8 frozen columns =====
+// ===== Excel-style drag-to-resize for the 8 frozen columns, plus a master
+// divider (the outer edge of the last frozen column) that drags the WHOLE
+// table block at once — all the way left to collapse the table and reveal
+// the full chart, or all the way right to cover the chart with the table. =====
 (function initColumnResize(){
-  let activeIdx = null, startX = 0, startWidth = 0;
+  const MASTER_IDX = COLS.length - 1;
+  let activeIdx = null, isMaster = false, startX = 0, startWidth = 0, startTotal = 0, ratios = null;
+
+  function beginDrag(handle, pageX){
+    activeIdx = +handle.dataset.colIndex;
+    isMaster = handle.classList.contains('master-resizer');
+    startX = pageX;
+    startWidth = COLS[activeIdx].w;
+    if (isMaster){
+      startTotal = COLS.reduce((s,c)=>s+c.w, 0);
+      ratios = startTotal > 0 ? COLS.map(c=>c.w/startTotal) : COLS.map(()=>1/COLS.length);
+    }
+    handle.classList.add('resizing');
+  }
+  function applyDrag(pageX){
+    if (activeIdx === null) return;
+    const delta = pageX - startX;
+    if (isMaster){
+      // Scale every frozen column together, preserving their relative proportions,
+      // so the whole block can shrink to nothing or grow to fill the view.
+      const newTotal = Math.max(0, startTotal + delta);
+      ratios.forEach((r,i)=>{ COLS[i].w = Math.max(0, r * newTotal); });
+    } else {
+      COLS[activeIdx].w = Math.max(1, startWidth + delta);
+    }
+    recomputeGridColumns();
+  }
+  function endDrag(){
+    if (activeIdx === null) return;
+    megaGrid.querySelectorAll('.col-resizer.resizing').forEach(h => h.classList.remove('resizing'));
+    activeIdx = null;
+    isMaster = false;
+  }
 
   megaGrid.addEventListener('mousedown', (e)=>{
     const handle = e.target.closest('.col-resizer');
     if (!handle) return;
     e.preventDefault();
-    activeIdx = +handle.dataset.colIndex;
-    startX = e.pageX;
-    startWidth = COLS[activeIdx].w;
-    handle.classList.add('resizing');
+    beginDrag(handle, e.pageX);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   });
   document.addEventListener('mousemove', (e)=>{
-    if (activeIdx === null) return;
-    COLS[activeIdx].w = Math.max(45, startWidth + (e.pageX - startX));
-    recomputeGridColumns();
+    applyDrag(e.pageX);
   });
   document.addEventListener('mouseup', ()=>{
-    if (activeIdx === null) return;
-    megaGrid.querySelectorAll('.col-resizer.resizing').forEach(h => h.classList.remove('resizing'));
-    activeIdx = null;
+    endDrag();
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   });
@@ -442,21 +481,13 @@ megaGrid.addEventListener('mouseout', (e)=>{
   megaGrid.addEventListener('touchstart', (e)=>{
     const handle = e.target.closest('.col-resizer');
     if (!handle) return;
-    activeIdx = +handle.dataset.colIndex;
-    startX = e.touches[0].pageX;
-    startWidth = COLS[activeIdx].w;
-    handle.classList.add('resizing');
+    beginDrag(handle, e.touches[0].pageX);
   }, {passive:true});
   document.addEventListener('touchmove', (e)=>{
     if (activeIdx === null || !e.touches[0]) return;
-    COLS[activeIdx].w = Math.max(45, startWidth + (e.touches[0].pageX - startX));
-    recomputeGridColumns();
+    applyDrag(e.touches[0].pageX);
   }, {passive:true});
-  document.addEventListener('touchend', ()=>{
-    if (activeIdx === null) return;
-    megaGrid.querySelectorAll('.col-resizer.resizing').forEach(h => h.classList.remove('resizing'));
-    activeIdx = null;
-  });
+  document.addEventListener('touchend', endDrag);
 })();
 
 document.getElementById('searchBox').addEventListener('input', render);
